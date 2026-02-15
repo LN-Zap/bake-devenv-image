@@ -1,0 +1,44 @@
+name: bake-devenv-image
+description: Generate activation assets and slim caches for devenv runner image snapshots.
+
+inputs:
+  snapshot_name:
+    description: Snapshot name label for reporting.
+    required: false
+    default: project-devenv
+  activation_script_path:
+    description: Path where activation script will be written.
+    required: false
+    default: /home/runner/copilot-devenv-activate.sh
+  slim_caches:
+    description: Whether transient caches should be removed before snapshot.
+    required: false
+    default: 'true'
+  cache_paths:
+    description: Newline-delimited cache paths to remove when slim_caches is true.
+    required: false
+    default: ''
+
+outputs:
+  activation_script_written:
+    description: Whether activation script file exists and is executable.
+    value: ${{ steps.run.outputs.activation_script_written }}
+  cache_bytes_removed:
+    description: Approximate total bytes removed from configured cache_paths.
+    value: ${{ steps.run.outputs.cache_bytes_removed }}
+  snapshot_name:
+    description: Snapshot name label.
+    value: ${{ steps.run.outputs.snapshot_name }}
+
+runs:
+  using: composite
+  steps:
+    - id: run
+      shell: bash
+      env:
+        SNAPSHOT_NAME: ${{ inputs.snapshot_name }}
+        ACTIVATION_SCRIPT_PATH: ${{ inputs.activation_script_path }}
+        SLIM_CACHES: ${{ inputs.slim_caches }}
+        CACHE_PATHS: ${{ inputs.cache_paths }}
+      run: |
+        bash "${{ github.action_path }}/scripts/bake-devenv-image.sh"

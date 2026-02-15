@@ -1,0 +1,69 @@
+name: Smoke Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Install shellcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          shellcheck scripts/*.sh
+
+      - name: Create fake devenv binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          cat <<'EOF' > "$RUNNER_TEMP/bin/devenv"
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [[ "${1:-}" != "shell" || "${2:-}" != "--" || "${3:-}" != "env" ]]; then
+            echo "unexpected args" >&2
+            exit 1
+          fi
+          echo "PATH=/opt/devenv/bin:$PATH"
+          echo "DEVENV_SMOKE=1"
+          EOF
+          chmod +x "$RUNNER_TEMP/bin/devenv"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Run bake-devenv-image action
+        id: bake
+        uses: ./
+        with:
+          snapshot_name: smoke-snapshot
+          activation_script_path: ${{ runner.temp }}/copilot-devenv-activate.sh
+          slim_caches: 'false'
+
+      - name: Validate outputs
+        shell: bash
+        env:
+          ACTIVATION_SCRIPT_WRITTEN: ${{ steps.bake.outputs.activation_script_written }}
+          SNAPSHOT_NAME: ${{ steps.bake.outputs.snapshot_name }}
+          ACTIVATION_SCRIPT_PATH: ${{ runner.temp }}/copilot-devenv-activate.sh
+        run: |
+          set -euo pipefail
+          test "$ACTIVATION_SCRIPT_WRITTEN" = "yes"
+          test "$SNAPSHOT_NAME" = "smoke-snapshot"
+          test -x "$ACTIVATION_SCRIPT_PATH"
